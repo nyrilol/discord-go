@@ -1,5 +1,5 @@
 // api/types.go
-package api
+package types
 
 import "encoding/json"
 
@@ -220,7 +220,7 @@ type GuildMember struct {
 type GatewayEvent struct {
 	T  string          `json:"t"`
 	D  json.RawMessage `json:"d"`
-	S  int             `json:"s"`
+	S  int64           `json:"s"`
 	OP int             `json:"op"`
 }
 
@@ -305,19 +305,4 @@ type Interaction struct {
 	GuildID   string          `json:"guild_id,omitempty"`
 	ChannelID string          `json:"channel_id"`
 	Member    GuildMember     `json:"member,omitempty"`
-}
-
-// too lzfjkzgksdhgiosdhgoisd
-type ReadyEvent struct {
-	User      User   `json:"user"`
-	Shard     []int  `json:"shard"`
-	SessionID string `json:"session_id"`
-}
-
-// too lzfjkzgksdhgiosdhgoisd
-type MessageCreateEvent struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	Timestamp string `json:"timestamp"`
-	Author    User   `json:"author"`
 }
