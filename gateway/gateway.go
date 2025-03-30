@@ -154,7 +154,7 @@ func (g *Gateway) handleEvent(eventType string, data json.RawMessage) {
 		return
 	}
 
-	// Create middleware chain
+	//   middleware chain
 	chain := func() {
 		for _, handler := range handlers {
 			eventPtr := reflect.New(handler.eventType).Interface()
@@ -169,7 +169,7 @@ func (g *Gateway) handleEvent(eventType string, data json.RawMessage) {
 		}
 	}
 
-	// Apply middlewares in reverse order
+	// apply middlewares in reverse order
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		mw := middlewares[i]
 		prevChain := chain
