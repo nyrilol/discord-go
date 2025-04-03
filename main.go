@@ -8,14 +8,12 @@ import (
 )
 
 func main() {
-	b := bot.NewBot("MTM1NTYxMzc2NzcyNzA1OTIzNQ.Gz2EZC.WVlozEeuSi89dOOGyCgIhQnPqZLkgDfxwC4j2o")
+	b := bot.NewBot("MY token not urs")
 
-	// Message command
 	b.AddMessageHandler("!ping", func(ctx *bot.MessageContext) {
 		fmt.Printf("Received ping command from %s\n", ctx.Message.Author.Username)
 	})
 
-	// Slash commands
 	b.AddSlashCommand("ping", "Check if the bot is alive", func(ctx *bot.CommandContext) {
 		b.RespondToInteraction(ctx, "Pong! -100ms using discord-go")
 	})
@@ -38,7 +36,6 @@ func main() {
 		b.RespondWithComponents(ctx, "Here are some interactive components:", components)
 	})
 
-	// Button handlers
 	b.AddComponentHandler("test_button", func(ctx *bot.ComponentContext) {
 		response := types.InteractionResponse{
 			Type: types.InteractionResponseTypeUpdateMessage,
@@ -60,7 +57,6 @@ func main() {
 		b.RespondWithModal(ctx, modal)
 	})
 
-	// Select menu handler
 	b.AddComponentHandler("test_select", func(ctx *bot.ComponentContext) {
 		selected := ctx.Values[0]
 		response := types.InteractionResponse{
