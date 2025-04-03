@@ -1,4 +1,4 @@
-package gateway
+package api
 
 const (
 	IntentGuilds                      = 1 << 0

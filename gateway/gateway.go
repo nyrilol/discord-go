@@ -1,11 +1,16 @@
 package gateway
 
 import (
+	"bytes"
+	"discord-go/api"
 	"discord-go/api/types"
 	"discord-go/utils"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"reflect"
 	"sync"
 	"time"
@@ -63,7 +68,7 @@ type SessionCache struct {
 }
 
 func NewGateway(token string, intents ...int) *Gateway {
-	intentValue := IntentAll
+	intentValue := api.IntentAll
 	if len(intents) > 0 {
 		intentValue = intents[0]
 	}
@@ -75,7 +80,7 @@ func NewGateway(token string, intents ...int) *Gateway {
 		intents:       intentValue,
 		state:         StateDisconnected,
 		eventHandlers: make(map[string][]eventHandler),
-		logger:        utils.NewLogger(), // Initialize logger
+		logger:        utils.NewLogger(),
 		cache: &SessionCache{
 			Guilds:   make(map[string]types.Guild),
 			Channels: make(map[string]types.Channel),
@@ -88,6 +93,12 @@ func NewGateway(token string, intents ...int) *Gateway {
 // Connection Management --------------------------------------------------------
 
 func (g *Gateway) Connect(url string) error {
+	g.mu.Lock()
+	if g.EventChan == nil {
+		g.EventChan = make(chan json.RawMessage, 100)
+	}
+	g.mu.Unlock()
+
 	g.setState(StateConnecting)
 
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
@@ -114,6 +125,11 @@ func (g *Gateway) Close() error {
 	g.setState(StateDisconnected)
 	close(g.stopHeartbeat)
 
+	if g.EventChan != nil {
+		close(g.EventChan)
+		g.EventChan = nil
+	}
+
 	if g.Conn != nil {
 		return g.Conn.Close()
 	}
@@ -122,7 +138,7 @@ func (g *Gateway) Close() error {
 
 // Event Handling --------------------------------------------------------------
 
-func (g *Gateway) RegisterHandler(eventType string, handlerFunc interface{}) {
+func (g *Gateway) RegisterHandler(eventType string, handlerFunc interface{}, eventStruct ...interface{}) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -131,11 +147,23 @@ func (g *Gateway) RegisterHandler(eventType string, handlerFunc interface{}) {
 		panic("handler must be a function with exactly one parameter")
 	}
 
-	eventStructType := handlerType.In(0)
+	var eventTypeReflect reflect.Type
+	if len(eventStruct) > 0 {
+		eventTypeReflect = reflect.TypeOf(eventStruct[0])
+	} else {
+		eventTypeReflect = handlerType.In(0)
+	}
+
 	g.eventHandlers[eventType] = append(g.eventHandlers[eventType], eventHandler{
 		handlerFunc: handlerFunc,
-		eventType:   eventStructType,
+		eventType:   eventTypeReflect,
 	})
+}
+
+func (g *Gateway) RemoveHandler(eventType string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.eventHandlers, eventType)
 }
 
 func (g *Gateway) Use(middleware MiddlewareFunc) {
@@ -154,7 +182,11 @@ func (g *Gateway) handleEvent(eventType string, data json.RawMessage) {
 		return
 	}
 
+<<<<<<< HEAD
 	//   middleware chain
+=======
+	// create 	 middleware chain
+>>>>>>> b641ce9 (should be ok)
 	chain := func() {
 		for _, handler := range handlers {
 			eventPtr := reflect.New(handler.eventType).Interface()
@@ -169,7 +201,11 @@ func (g *Gateway) handleEvent(eventType string, data json.RawMessage) {
 		}
 	}
 
+<<<<<<< HEAD
 	// apply middlewares in reverse order
+=======
+	// reverse order
+>>>>>>> b641ce9 (should be ok)
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		mw := middlewares[i]
 		prevChain := chain
@@ -182,8 +218,14 @@ func (g *Gateway) handleEvent(eventType string, data json.RawMessage) {
 // WebSocket Communication -----------------------------------------------------
 
 func (g *Gateway) listen() {
-	defer close(g.EventChan)
-	defer g.Conn.Close()
+	defer func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.EventChan != nil {
+			close(g.EventChan)
+			g.EventChan = nil
+		}
+	}()
 
 	for {
 		_, message, err := g.Conn.ReadMessage()
@@ -252,8 +294,8 @@ func (g *Gateway) sendIdentify() error {
 			"token": g.Token,
 			"properties": map[string]string{
 				"$os":      "linux",
-				"$browser": "discord-go",
-				"$device":  "discord-go",
+				"$browser": "nyrilol/discord-go",
+				"$device":  "nyrilol/discord-go",
 			},
 			"intents": g.intents,
 		},
@@ -297,7 +339,7 @@ func (g *Gateway) startHeartbeat(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	// Send initial heartbeat immediately
+	// send heartbeat
 	if err := g.sendHeartbeat(); err != nil {
 		g.logger.Errorf("Failed to send heartbeat: %v", err)
 		return
@@ -356,4 +398,141 @@ func calculateBackoff(attempt int) time.Duration {
 	jitter := (maxDelay - minDelay) * 0.2
 
 	return time.Duration(minDelay + jitter)
+}
+
+// Interaction Handling --------------------------------------------------------
+
+func (g *Gateway) SendInteractionResponse(interactionID types.Snowflake, interactionToken string, response types.InteractionResponse) error {
+	payload := map[string]interface{}{
+		"type": response.Type,
+		"data": response.Data,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("https://discord.com/api/v10/interactions/%s/%s/callback", interactionID, interactionToken)
+	_, err = g.makeHTTPRequest("POST", url, data)
+	return err
+}
+
+func (g *Gateway) SendFollowupMessage(interactionToken string, message types.WebhookMessage) error {
+	appID, err := g.getApplicationID()
+	if err != nil {
+		g.logger.Errorf("failed to get application ID: %v", err)
+
+		return err
+	}
+
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	data, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("https://discord.com/api/v10/webhooks/%s/%s/messages", appID, interactionToken)
+	_, err = g.makeHTTPRequest("POST", url, data)
+	return err
+}
+
+func (g *Gateway) EditOriginalInteractionResponse(interactionToken, content string) error {
+	appID, err := g.getApplicationID()
+	if err != nil {
+		g.logger.Errorf("failed to get application ID: %v", err)
+
+		return err
+	}
+
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	payload := map[string]interface{}{
+		"content": content,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("https://discord.com/api/v10/webhooks/%s/%s/messages/@original", appID, interactionToken)
+	_, err = g.makeHTTPRequest("PATCH", url, data)
+	return err
+}
+
+func (g *Gateway) CreateGlobalApplicationCommand(command types.ApplicationCommand) error {
+	return g.createApplicationCommand("", command)
+}
+
+func (g *Gateway) CreateGuildApplicationCommand(guildID types.Snowflake, command types.ApplicationCommand) error {
+	return g.createApplicationCommand(guildID, command)
+}
+
+func (g *Gateway) createApplicationCommand(guildID types.Snowflake, command types.ApplicationCommand) error {
+	appID, err := g.getApplicationID()
+	if err != nil {
+		g.logger.Errorf("failed to get application ID: %v", err)
+
+		return err
+	}
+
+	data, err := json.Marshal(command)
+	if err != nil {
+		return err
+	}
+
+	var url string
+	if guildID != "" {
+		url = fmt.Sprintf("https://discord.com/api/v10/applications/%s/guilds/%s/commands", appID, guildID)
+	} else {
+		url = fmt.Sprintf("https://discord.com/api/v10/applications/%s/commands", appID)
+	}
+
+	_, err = g.makeHTTPRequest("POST", url, data)
+	return err
+}
+
+func (g *Gateway) getApplicationID() (string, error) {
+	url := "https://discord.com/api/v10/users/@me"
+	resp, err := g.makeHTTPRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	var botUser struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(resp, &botUser); err != nil {
+		return "", err
+	}
+
+	return botUser.ID, nil
+}
+
+func (g *Gateway) makeHTTPRequest(method, url string, body []byte) ([]byte, error) {
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bot "+g.Token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "DiscordBot (https://github.com/nyrilol/discord-go, 1.0)")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	return io.ReadAll(resp.Body)
 }
