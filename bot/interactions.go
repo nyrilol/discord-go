@@ -1,7 +1,7 @@
 package bot
 
 import (
-	"discord-go/api/types"
+	"github.com/nyrilol/discord-go/api/types"
 	"fmt"
 )
 
