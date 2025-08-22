@@ -2,9 +2,9 @@ package gateway
 
 import (
 	"bytes"
-	"discord-go/api"
-	"discord-go/api/types"
-	"discord-go/utils"
+	"github.com/nyrilol/discord-go/api"
+	"github.com/nyrilol/discord-go/api/types"
+	"github.com/nyrilol/discord-go/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
 
 type ConnectionState int
 
