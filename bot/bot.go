@@ -1,10 +1,10 @@
 package bot
 
 import (
-	"discord-go/api"
-	"discord-go/api/types"
-	"discord-go/gateway"
-	"discord-go/utils"
+	"github.com/nyrilol/discord-go/api"
+	"github.com/nyrilol/discord-go/api/types"
+	"github.com/nyrilol/discord-go/gateway"
+	"github.com/nyrilol/discord-go/utils"
 	"strings"
 	"sync"
 )
