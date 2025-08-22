@@ -1,4 +1,4 @@
-module discord-go
+module github.com/nyrilol/discord-go
 
 go 1.24
 
