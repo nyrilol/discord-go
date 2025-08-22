@@ -3,7 +3,7 @@ package api
 
 import (
 	"bytes"
-	"discord-go/api/types"
+	"github.com/nyrilol/discord-go/api/types"
 	"encoding/json"
 	"fmt"
 	"net/http"
